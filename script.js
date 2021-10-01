@@ -1,562 +1,438 @@
-var Input = {
-  keys: [],
-  mouse: {
-    left: false,
-    right: false,
-    middle: false,
-    x: 0,
-    y: 0
+//THREEJS RELATED VARIABLES 
+
+var scene,
+    camera, fieldOfView, aspectRatio, nearPlane, farPlane,
+    gobalLight, shadowLight, backLight,
+    renderer,
+    container,
+    controls;
+
+//SCREEN & MOUSE VARIABLES
+
+var HEIGHT, WIDTH, windowHalfX, windowHalfY,
+    mousePos = { x: 0, y: 0 },
+    oldMousePos = {x:0, y:0},
+    ballWallDepth = 28;
+
+
+//3D OBJECTS VARIABLES
+
+var hero;
+
+//INIT THREE JS, SCREEN AND MOUSE EVENTS
+
+function initScreenAnd3D() {
+  
+  HEIGHT = window.innerHeight;
+  WIDTH = window.innerWidth;
+  windowHalfX = WIDTH / 2;
+  windowHalfY = HEIGHT / 2;
+
+  scene = new THREE.Scene();
+  aspectRatio = WIDTH / HEIGHT;
+  fieldOfView = 50;
+  nearPlane = 1;
+  farPlane = 2000;
+  camera = new THREE.PerspectiveCamera(
+    fieldOfView,
+    aspectRatio,
+    nearPlane,
+    farPlane
+    );
+  camera.position.x = 0;
+  camera.position.z = 300;
+  camera.position.y = 250;
+  camera.lookAt(new THREE.Vector3(0, 60, 0));
+
+  renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+  renderer.setPixelRatio( window.devicePixelRatio );
+  renderer.setSize(WIDTH, HEIGHT);
+  renderer.shadowMapEnabled = true;
+  
+  container = document.getElementById('world');
+  container.appendChild(renderer.domElement);
+  
+  window.addEventListener('resize', handleWindowResize, false);
+  document.addEventListener('mousemove', handleMouseMove, false);
+  document.addEventListener('touchmove', handleTouchMove, false);
+  
+  /*
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.minPolarAngle = -Math.PI / 2; 
+  controls.maxPolarAngle = Math.PI / 2;
+  controls.noZoom = true;
+  controls.noPan = true;
+  //*/
+
+
+}
+
+function handleWindowResize() {
+  HEIGHT = window.innerHeight;
+  WIDTH = window.innerWidth;
+  windowHalfX = WIDTH / 2;
+  windowHalfY = HEIGHT / 2;
+  renderer.setSize(WIDTH, HEIGHT);
+  camera.aspect = WIDTH / HEIGHT;
+  camera.updateProjectionMatrix();
+}
+
+function handleMouseMove(event) {
+  mousePos = {x:event.clientX, y:event.clientY};
+} 
+
+function handleTouchMove(event) {
+  if (event.touches.length == 1) {
+    event.preventDefault();
+    mousePos = {x:event.touches[0].pageX, y:event.touches[0].pageY};
   }
+}
+
+function createLights() {
+  globalLight = new THREE.HemisphereLight(0xffffff, 0xffffff, .5)
+  
+  shadowLight = new THREE.DirectionalLight(0xffffff, .9);
+  shadowLight.position.set(200, 200, 200);
+  shadowLight.castShadow = true;
+  shadowLight.shadowDarkness = .2;
+  shadowLight.shadowMapWidth = shadowLight.shadowMapHeight = 2048;
+  
+  backLight = new THREE.DirectionalLight(0xffffff, .4);
+  backLight.position.set(-100, 100, 100);
+  backLight.castShadow = true;
+  backLight.shadowDarkness = .1;
+  backLight.shadowMapWidth = shadowLight.shadowMapHeight = 2048;
+  
+  scene.add(globalLight);
+  scene.add(shadowLight);
+  scene.add(backLight);
+}
+
+function createFloor(){ 
+  floor = new THREE.Mesh(new THREE.PlaneBufferGeometry(1000,1000), new THREE.MeshBasicMaterial({color: 0x6ecccc}));
+  floor.rotation.x = -Math.PI/2;
+  floor.position.y = 0;
+  floor.receiveShadow = true;
+  scene.add(floor);
+}
+
+function createHero() {
+  hero = new Cat();
+  scene.add(hero.threeGroup);
+}
+
+function createBall() {
+  ball = new Ball();
+  scene.add(ball.threeGroup);
+}
+
+// BALL RELATED CODE
+
+
+var woolNodes = 10,
+	woolSegLength = 2,
+	gravity = -.8,
+	accuracy =1;
+
+
+Ball = function(){
+
+	var redMat = new THREE.MeshLambertMaterial ({
+	    color: 0x630d15, 
+	    shading:THREE.FlatShading
+	});
+
+	var stringMat = new THREE.LineBasicMaterial({
+    	color: 0x630d15,
+    	linewidth: 3
+	});
+
+	this.threeGroup = new THREE.Group();
+	this.ballRay = 8;
+
+	this.verts = [];
+
+	// string
+	var stringGeom = new THREE.Geometry();
+
+	for (var i=0; i< woolNodes; i++	){
+		var v = new THREE.Vector3(0, -i*woolSegLength, 0);
+		stringGeom.vertices.push(v);
+
+		var woolV = new WoolVert();
+		woolV.x = woolV.oldx = v.x;
+		woolV.y = woolV.oldy = v.y;
+		woolV.z = 0;
+		woolV.fx = woolV.fy = 0;
+		woolV.isRootNode = (i==0);
+		woolV.vertex = v;
+		if (i > 0) woolV.attach(this.verts[(i - 1)]);
+		this.verts.push(woolV);
+		
+	}
+  	this.string = new THREE.Line(stringGeom, stringMat);
+
+  	// body
+  	var bodyGeom = new THREE.SphereGeometry(this.ballRay, 5,4);
+	this.body = new THREE.Mesh(bodyGeom, redMat);
+  	this.body.position.y = -woolSegLength*woolNodes;
+
+  	var wireGeom = new THREE.TorusGeometry( this.ballRay, .5, 3, 10, Math.PI*2 );
+  	this.wire1 = new THREE.Mesh(wireGeom, redMat);
+  	this.wire1.position.x = 1;
+  	this.wire1.rotation.x = -Math.PI/4;
+
+  	this.wire2 = this.wire1.clone();
+  	this.wire2.position.y = 1;
+  	this.wire2.position.x = -1;
+  	this.wire1.rotation.x = -Math.PI/4 + .5;
+  	this.wire1.rotation.y = -Math.PI/6;
+
+  	this.wire3 = this.wire1.clone();
+  	this.wire3.rotation.x = -Math.PI/2 + .3;
+
+  	this.wire4 = this.wire1.clone();
+  	this.wire4.position.x = -1;
+  	this.wire4.rotation.x = -Math.PI/2 + .7;
+
+  	this.wire5 = this.wire1.clone();
+  	this.wire5.position.x = 2;
+  	this.wire5.rotation.x = -Math.PI/2 + 1;
+
+  	this.wire6 = this.wire1.clone();
+  	this.wire6.position.x = 2;
+  	this.wire6.position.z = 1;
+  	this.wire6.rotation.x = 1;
+
+  	this.wire7 = this.wire1.clone();
+  	this.wire7.position.x = 1.5;
+  	this.wire7.rotation.x = 1.1;
+
+  	this.wire8 = this.wire1.clone();
+  	this.wire8.position.x = 1;
+  	this.wire8.rotation.x = 1.3;
+
+  	this.wire9 = this.wire1.clone();
+  	this.wire9.scale.set(1.2,1.1,1.1);
+  	this.wire9.rotation.z = Math.PI/2;
+  	this.wire9.rotation.y = Math.PI/2;
+  	this.wire9.position.y = 1;
+  	
+  	this.body.add(this.wire1);
+  	this.body.add(this.wire2);
+  	this.body.add(this.wire3);
+  	this.body.add(this.wire4);
+  	this.body.add(this.wire5);
+  	this.body.add(this.wire6);
+  	this.body.add(this.wire7);
+  	this.body.add(this.wire8);
+  	this.body.add(this.wire9);
+
+  	this.threeGroup.add(this.string);
+	this.threeGroup.add(this.body);
+
+	this.threeGroup.traverse( function ( object ) {
+    if ( object instanceof THREE.Mesh ) {
+      object.castShadow = true;
+      object.receiveShadow = true;
+    }});
+
+}
+
+/* 
+The next part of the code is largely inspired by this codepen :
+https://codepen.io/dissimulate/pen/KrAwx?editors=001
+thanks to dissimulate for his great work
+*/
+
+/*
+Copyright (c) 2013 dissimulate at Codepen
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+*/
+
+
+
+WoolVert = function(){
+	this.x = 0;
+	this.y = 0;
+	this.z = 0;
+	this.oldx = 0;
+	this.oldy = 0;
+	this.fx = 0;
+	this.fy = 0;
+	this.isRootNode = false;
+	this.constraints = [];
+	this.vertex = null;
+}
+
+
+WoolVert.prototype.update = function(){
+	var wind = 0;//.1+Math.random()*.5;
+  	this.add_force(wind, gravity);
+
+  	nx = this.x + ((this.x - this.oldx)*.9) + this.fx;
+  	ny = this.y + ((this.y - this.oldy)*.9) + this.fy;
+  	this.oldx = this.x;
+  	this.oldy = this.y;
+  	this.x = nx;
+  	this.y = ny;
+
+  	this.vertex.x = this.x;
+  	this.vertex.y = this.y;
+  	this.vertex.z = this.z;
+
+  	this.fy = this.fx = 0
+}
+
+WoolVert.prototype.attach = function(point) {
+  this.constraints.push(new Constraint(this, point));
 };
-for (var i = 0; i < 230; i++) {
-  Input.keys.push(false);
-}
-document.addEventListener("keydown", function(event) {
-  Input.keys[event.keyCode] = true;
-});
-document.addEventListener("keyup", function(event) {
-  Input.keys[event.keyCode] = false;
-});
-document.addEventListener("mousedown", function(event) {
-  if ((event.button = 0)) {
-    Input.mouse.left = true;
-  }
-  if ((event.button = 1)) {
-    Input.mouse.middle = true;
-  }
-  if ((event.button = 2)) {
-    Input.mouse.right = true;
-  }
-});
-document.addEventListener("mouseup", function(event) {
-  if ((event.button = 0)) {
-    Input.mouse.left = false;
-  }
-  if ((event.button = 1)) {
-    Input.mouse.middle = false;
-  }
-  if ((event.button = 2)) {
-    Input.mouse.right = false;
-  }
-});
-document.addEventListener("mousemove", function(event) {
-  Input.mouse.x = event.clientX;
-  Input.mouse.y = event.clientY;
-});
-//Sets up canvas
-var canvas = document.createElement("canvas");
-document.body.appendChild(canvas);
-canvas.width = Math.max(window.innerWidth, window.innerWidth);
-canvas.height = Math.max(window.innerWidth, window.innerWidth);
-canvas.style.position = "absolute";
-canvas.style.left = "0px";
-canvas.style.top = "0px";
-document.body.style.overflow = "hidden";
-var ctx = canvas.getContext("2d");
-//Necessary classes
-var segmentCount = 0;
-class Segment {
-  constructor(parent, size, angle, range, stiffness) {
-    segmentCount++;
-    this.isSegment = true;
-    this.parent = parent; //Segment which this one is connected to
-    if (typeof parent.children == "object") {
-      parent.children.push(this);
-    }
-    this.children = []; //Segments connected to this segment
-    this.size = size; //Distance from parent
-    this.relAngle = angle; //Angle relative to parent
-    this.defAngle = angle; //Default angle relative to parent
-    this.absAngle = parent.absAngle + angle; //Angle relative to x-axis
-    this.range = range; //Difference between maximum and minimum angles
-    this.stiffness = stiffness; //How closely it conforms to default angle
-    this.updateRelative(false, true);
-  }
-  updateRelative(iter, flex) {
-    this.relAngle =
-      this.relAngle -
-      2 *
-        Math.PI *
-        Math.floor((this.relAngle - this.defAngle) / 2 / Math.PI + 1 / 2);
-    if (flex) {
-      //		this.relAngle=this.range/
-      //				(1+Math.exp(-4*(this.relAngle-this.defAngle)/
-      //				(this.stiffness*this.range)))
-      //			  -this.range/2+this.defAngle;
-      this.relAngle = Math.min(
-        this.defAngle + this.range / 2,
-        Math.max(
-          this.defAngle - this.range / 2,
-          (this.relAngle - this.defAngle) / this.stiffness + this.defAngle
-        )
-      );
-    }
-    this.absAngle = this.parent.absAngle + this.relAngle;
-    this.x = this.parent.x + Math.cos(this.absAngle) * this.size; //Position
-    this.y = this.parent.y + Math.sin(this.absAngle) * this.size; //Position
-    if (iter) {
-      for (var i = 0; i < this.children.length; i++) {
-        this.children[i].updateRelative(iter, flex);
-      }
-    }
-  }
-  draw(iter) {
-    ctx.beginPath();
-    ctx.moveTo(this.parent.x, this.parent.y);
-    ctx.lineTo(this.x, this.y);
-    ctx.stroke();
-    if (iter) {
-      for (var i = 0; i < this.children.length; i++) {
-        this.children[i].draw(true);
-      }
-    }
-  }
-  follow(iter) {
-    var x = this.parent.x;
-    var y = this.parent.y;
-    var dist = ((this.x - x) ** 2 + (this.y - y) ** 2) ** 0.5;
-    this.x = x + this.size * (this.x - x) / dist;
-    this.y = y + this.size * (this.y - y) / dist;
-    this.absAngle = Math.atan2(this.y - y, this.x - x);
-    this.relAngle = this.absAngle - this.parent.absAngle;
-    this.updateRelative(false, true);
-    //this.draw();
-    if (iter) {
-      for (var i = 0; i < this.children.length; i++) {
-        this.children[i].follow(true);
-      }
-    }
-  }
-}
-class LimbSystem {
-  constructor(end, length, speed, creature) {
-    this.end = end;
-    this.length = Math.max(1, length);
-    this.creature = creature;
-    this.speed = speed;
-    creature.systems.push(this);
-    this.nodes = [];
-    var node = end;
-    for (var i = 0; i < length; i++) {
-      this.nodes.unshift(node);
-      //node.stiffness=1;
-      node = node.parent;
-      if (!node.isSegment) {
-        this.length = i + 1;
-        break;
-      }
-    }
-    this.hip = this.nodes[0].parent;
-  }
-  moveTo(x, y) {
-    this.nodes[0].updateRelative(true, true);
-    var dist = ((x - this.end.x) ** 2 + (y - this.end.y) ** 2) ** 0.5;
-    var len = Math.max(0, dist - this.speed);
-    for (var i = this.nodes.length - 1; i >= 0; i--) {
-      var node = this.nodes[i];
-      var ang = Math.atan2(node.y - y, node.x - x);
-      node.x = x + len * Math.cos(ang);
-      node.y = y + len * Math.sin(ang);
-      x = node.x;
-      y = node.y;
-      len = node.size;
-    }
-    for (var i = 0; i < this.nodes.length; i++) {
-      var node = this.nodes[i];
-      node.absAngle = Math.atan2(
-        node.y - node.parent.y,
-        node.x - node.parent.x
-      );
-      node.relAngle = node.absAngle - node.parent.absAngle;
-      for (var ii = 0; ii < node.children.length; ii++) {
-        var childNode = node.children[ii];
-        if (!this.nodes.includes(childNode)) {
-          childNode.updateRelative(true, false);
-        }
-      }
-    }
-    //this.nodes[0].updateRelative(true,false)
-  }
-  update() {
-    this.moveTo(Input.mouse.x, Input.mouse.y);
-  }
-}
-class LegSystem extends LimbSystem {
-  constructor(end, length, speed, creature) {
-    super(end, length, speed, creature);
-    this.goalX = end.x;
-    this.goalY = end.y;
-    this.step = 0; //0 stand still, 1 move forward,2 move towards foothold
-    this.forwardness = 0;
 
-    //For foot goal placement
-    this.reach =
-      0.9 *
-      ((this.end.x - this.hip.x) ** 2 + (this.end.y - this.hip.y) ** 2) ** 0.5;
-    var relAngle =
-      this.creature.absAngle -
-      Math.atan2(this.end.y - this.hip.y, this.end.x - this.hip.x);
-    relAngle -= 2 * Math.PI * Math.floor(relAngle / 2 / Math.PI + 1 / 2);
-    this.swing = -relAngle + (2 * (relAngle < 0) - 1) * Math.PI / 2;
-    this.swingOffset = this.creature.absAngle - this.hip.absAngle;
-    //this.swing*=(2*(relAngle>0)-1);
-  }
-  update(x, y) {
-    this.moveTo(this.goalX, this.goalY);
-    //this.nodes[0].follow(true,true)
-    if (this.step == 0) {
-      var dist =
-        ((this.end.x - this.goalX) ** 2 + (this.end.y - this.goalY) ** 2) **
-        0.5;
-      if (dist > 1) {
-        this.step = 1;
-        //this.goalX=x;
-        //this.goalY=y;
-        this.goalX =
-          this.hip.x +
-          this.reach *
-            Math.cos(this.swing + this.hip.absAngle + this.swingOffset) +
-          (2 * Math.random() - 1) * this.reach / 2;
-        this.goalY =
-          this.hip.y +
-          this.reach *
-            Math.sin(this.swing + this.hip.absAngle + this.swingOffset) +
-          (2 * Math.random() - 1) * this.reach / 2;
-      }
-    } else if (this.step == 1) {
-      var theta =
-        Math.atan2(this.end.y - this.hip.y, this.end.x - this.hip.x) -
-        this.hip.absAngle;
-      var dist =
-        ((this.end.x - this.hip.x) ** 2 + (this.end.y - this.hip.y) ** 2) **
-        0.5;
-      var forwardness2 = dist * Math.cos(theta);
-      var dF = this.forwardness - forwardness2;
-      this.forwardness = forwardness2;
-      if (dF * dF < 1) {
-        this.step = 0;
-        this.goalX = this.hip.x + (this.end.x - this.hip.x);
-        this.goalY = this.hip.y + (this.end.y - this.hip.y);
-      }
-    }
-    //	ctx.strokeStyle='blue';
-    //	ctx.beginPath();
-    //	ctx.moveTo(this.end.x,this.end.y);
-    //	ctx.lineTo(this.hip.x+this.reach*Math.cos(this.swing+this.hip.absAngle+this.swingOffset),
-    //				this.hip.y+this.reach*Math.sin(this.swing+this.hip.absAngle+this.swingOffset));
-    //	ctx.stroke();
-    //	ctx.strokeStyle='black';
-  }
-}
-class Creature {
-  constructor(
-    x,
-    y,
-    angle,
-    fAccel,
-    fFric,
-    fRes,
-    fThresh,
-    rAccel,
-    rFric,
-    rRes,
-    rThresh
-  ) {
-    this.x = x; //Starting position
-    this.y = y;
-    this.absAngle = angle; //Staring angle
-    this.fSpeed = 0; //Forward speed
-    this.fAccel = fAccel; //Force when moving forward
-    this.fFric = fFric; //Friction against forward motion
-    this.fRes = fRes; //Resistance to motion
-    this.fThresh = fThresh; //minimum distance to target to keep moving forward
-    this.rSpeed = 0; //Rotational speed
-    this.rAccel = rAccel; //Force when rotating
-    this.rFric = rFric; //Friction against rotation
-    this.rRes = rRes; //Resistance to rotation
-    this.rThresh = rThresh; //Maximum angle difference before rotation
-    this.children = [];
-    this.systems = [];
-  }
-  follow(x, y) {
-    var dist = ((this.x - x) ** 2 + (this.y - y) ** 2) ** 0.5;
-    var angle = Math.atan2(y - this.y, x - this.x);
-    //Update forward
-    var accel = this.fAccel;
-    if (this.systems.length > 0) {
-      var sum = 0;
-      for (var i = 0; i < this.systems.length; i++) {
-        sum += this.systems[i].step == 0;
-      }
-      accel *= sum / this.systems.length;
-    }
-    this.fSpeed += accel * (dist > this.fThresh);
-    this.fSpeed *= 1 - this.fRes;
-    this.speed = Math.max(0, this.fSpeed - this.fFric);
-    //Update rotation
-    var dif = this.absAngle - angle;
-    dif -= 2 * Math.PI * Math.floor(dif / (2 * Math.PI) + 1 / 2);
-    if (Math.abs(dif) > this.rThresh && dist > this.fThresh) {
-      this.rSpeed -= this.rAccel * (2 * (dif > 0) - 1);
-    }
-    this.rSpeed *= 1 - this.rRes;
-    if (Math.abs(this.rSpeed) > this.rFric) {
-      this.rSpeed -= this.rFric * (2 * (this.rSpeed > 0) - 1);
-    } else {
-      this.rSpeed = 0;
-    }
+WoolVert.prototype.add_force = function(x, y) {
+  this.fx += x;
+  this.fy += y;
+};
 
-    //Update position
-    this.absAngle += this.rSpeed;
-    this.absAngle -=
-      2 * Math.PI * Math.floor(this.absAngle / (2 * Math.PI) + 1 / 2);
-    this.x += this.speed * Math.cos(this.absAngle);
-    this.y += this.speed * Math.sin(this.absAngle);
-    this.absAngle += Math.PI;
-    for (var i = 0; i < this.children.length; i++) {
-      this.children[i].follow(true, true);
-    }
-    for (var i = 0; i < this.systems.length; i++) {
-      this.systems[i].update(x, y);
-    }
-    this.absAngle -= Math.PI;
-    this.draw(true);
-  }
-  draw(iter) {
-    var r = 4;
-    ctx.beginPath();
-    ctx.arc(
-      this.x,
-      this.y,
-      r,
-      Math.PI / 4 + this.absAngle,
-      7 * Math.PI / 4 + this.absAngle
-    );
-    ctx.moveTo(
-      this.x + r * Math.cos(7 * Math.PI / 4 + this.absAngle),
-      this.y + r * Math.sin(7 * Math.PI / 4 + this.absAngle)
-    );
-    ctx.lineTo(
-      this.x + r * Math.cos(this.absAngle) * 2 ** 0.5,
-      this.y + r * Math.sin(this.absAngle) * 2 ** 0.5
-    );
-    ctx.lineTo(
-      this.x + r * Math.cos(Math.PI / 4 + this.absAngle),
-      this.y + r * Math.sin(Math.PI / 4 + this.absAngle)
-    );
-    ctx.stroke();
-    if (iter) {
-      for (var i = 0; i < this.children.length; i++) {
-        this.children[i].draw(true);
-      }
-    }
-  }
-}
-//Initializes and animates
-var critter;
-function setupSimple() {
-  //(x,y,angle,fAccel,fFric,fRes,fThresh,rAccel,rFric,rRes,rThresh)
-  var critter = new Creature(
-    window.innerWidth / 2,
-    window.innerHeight / 2,
-    0,
-    12,
-    1,
-    0.5,
-    16,
-    0.5,
-    0.085,
-    0.5,
-    0.3
-  );
-  var node = critter;
-  //(parent,size,angle,range,stiffness)
-  for (var i = 0; i < 128; i++) {
-    var node = new Segment(node, 8, 0, 3.14159 / 2, 1);
-  }
-  setInterval(function() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    critter.follow(Input.mouse.x, Input.mouse.y);
-  }, 33);
-}
-function setupTentacle() {
-  //(x,y,angle,fAccel,fFric,fRes,fThresh,rAccel,rFric,rRes,rThresh)
-  critter = new Creature(
-    window.innerWidth / 2,
-    window.innerHeight / 2,
-    0,
-    12,
-    1,
-    0.5,
-    16,
-    0.5,
-    0.085,
-    0.5,
-    0.3
-  );
-  var node = critter;
-  //(parent,size,angle,range,stiffness)
-  for (var i = 0; i < 32; i++) {
-    var node = new Segment(node, 8, 0, 2, 1);
-  }
-  //(end,length,speed,creature)
-  var tentacle = new LimbSystem(node, 32, 8, critter);
-  setInterval(function() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    critter.follow(canvas.width / 2, canvas.height / 2);
-    ctx.beginPath();
-    ctx.arc(Input.mouse.x, Input.mouse.y, 2, 0, 6.283);
-    ctx.fill();
-  }, 33);
-}
-function setupArm() {
-  //(x,y,angle,fAccel,fFric,fRes,fThresh,rAccel,rFric,rRes,rThresh)
-  var critter = new Creature(
-    window.innerWidth / 2,
-    window.innerHeight / 2,
-    0,
-    12,
-    1,
-    0.5,
-    16,
-    0.5,
-    0.085,
-    0.5,
-    0.3
-  );
-  var node = critter;
-  //(parent,size,angle,range,stiffness)
-  for (var i = 0; i < 3; i++) {
-    var node = new Segment(node, 80, 0, 3.1416, 1);
-  }
-  var tentacle = new LimbSystem(node, 3, critter);
-  setInterval(function() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    critter.follow(canvas.width / 2, canvas.height / 2);
-  }, 33);
-  ctx.beginPath();
-  ctx.arc(Input.mouse.x, Input.mouse.y, 2, 0, 6.283);
-  ctx.fill();
+Constraint = function(p1, p2) {
+  this.p1 = p1;
+  this.p2 = p2;
+  this.length = woolSegLength;
+};
+
+Ball.prototype.update = function(posX, posY, posZ){
+		
+	var i = accuracy;
+	
+	while (i--) {
+		
+		var nodesCount = woolNodes;
+		
+		while (nodesCount--) {
+		
+			var v = this.verts[nodesCount];
+			
+			if (v.isRootNode) {
+			    v.x = posX;
+			    v.y = posY;
+			    v.z = posZ;
+			}
+		
+			else {
+		
+				var constraintsCount = v.constraints.length;
+		  		
+		  		while (constraintsCount--) {
+		  			
+		  			var c = v.constraints[constraintsCount];
+
+		  			var diff_x = c.p1.x - c.p2.x,
+					    diff_y = c.p1.y - c.p2.y,
+					    dist = Math.sqrt(diff_x * diff_x + diff_y * diff_y),
+					    diff = (c.length - dist) / dist;
+
+				  	var px = diff_x * diff * .5;
+				  	var py = diff_y * diff * .5;
+
+				  	c.p1.x += px;
+				  	c.p1.y += py;
+				  	c.p2.x -= px;
+				  	c.p2.y -= py;
+				  	c.p1.z = c.p2.z = posZ;
+		  		}
+
+		  		if (nodesCount == woolNodes-1){
+		  			this.body.position.x = this.verts[nodesCount].x;
+					this.body.position.y = this.verts[nodesCount].y;
+					this.body.position.z = this.verts[nodesCount].z;
+
+					this.body.rotation.z += (v.y <= this.ballRay)? (v.oldx-v.x)/10 : Math.min(Math.max( diff_x/2, -.1 ), .1);
+		  		}
+		  	}
+		  	
+		  	if (v.y < this.ballRay) {
+		  		v.y = this.ballRay;
+		  	}
+		}
+	}
+
+	nodesCount = woolNodes;
+	while (nodesCount--) this.verts[nodesCount].update();
+
+	this.string.geometry.verticesNeedUpdate = true;
+
+	
 }
 
-function setupTestSquid(size, legs) {
-  //(x,y,angle,fAccel,fFric,fRes,fThresh,rAccel,rFric,rRes,rThresh)
-  critter = new Creature(
-    window.innerWidth / 2,
-    window.innerHeight / 2,
-    0,
-    size * 10,
-    size * 3,
-    0.5,
-    16,
-    0.5,
-    0.085,
-    0.5,
-    0.3
-  );
-  var legNum = legs;
-  var jointNum = 32;
-  for (var i = 0; i < legNum; i++) {
-    var node = critter;
-    var ang = Math.PI / 2 * (i / (legNum - 1) - 0.5);
-    for (var ii = 0; ii < jointNum; ii++) {
-      var node = new Segment(
-        node,
-        size * 64 / jointNum,
-        ang * (ii == 0),
-        3.1416,
-        1.2
-      );
-    }
-    //(end,length,speed,creature,dist)
-    var leg = new LegSystem(node, jointNum, size * 30, critter);
-  }
-  setInterval(function() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    critter.follow(Input.mouse.x, Input.mouse.y);
-  }, 33);
+Ball.prototype.receivePower = function(tp){
+	this.verts[woolNodes-1].add_force(tp.x, tp.y);
 }
-function setupLizard(size, legs, tail) {
-  var s = size;
-  //(x,y,angle,fAccel,fFric,fRes,fThresh,rAccel,rFric,rRes,rThresh)
-  critter = new Creature(
-    window.innerWidth / 2,
-    window.innerHeight / 2,
-    0,
-    s * 10,
-    s * 2,
-    0.5,
-    16,
-    0.5,
-    0.085,
-    0.5,
-    0.3
-  );
-  var spinal = critter;
-  //(parent,size,angle,range,stiffness)
-  //Neck
-  for (var i = 0; i < 6; i++) {
-    spinal = new Segment(spinal, s * 4, 0, 3.1415 * 2 / 3, 1.1);
-    for (var ii = -1; ii <= 1; ii += 2) {
-      var node = new Segment(spinal, s * 3, ii, 0.1, 2);
-      for (var iii = 0; iii < 3; iii++) {
-        node = new Segment(node, s * 0.1, -ii * 0.1, 0.1, 2);
-      }
-    }
-  }
-  //Torso and legs
-  for (var i = 0; i < legs; i++) {
-    if (i > 0) {
-      //Vertebrae and ribs
-      for (var ii = 0; ii < 6; ii++) {
-        spinal = new Segment(spinal, s * 4, 0, 1.571, 1.5);
-        for (var iii = -1; iii <= 1; iii += 2) {
-          var node = new Segment(spinal, s * 3, iii * 1.571, 0.1, 1.5);
-          for (var iv = 0; iv < 3; iv++) {
-            node = new Segment(node, s * 3, -iii * 0.3, 0.1, 2);
-          }
-        }
-      }
-    }
-    //Legs and shoulders
-    for (var ii = -1; ii <= 1; ii += 2) {
-      var node = new Segment(spinal, s * 12, ii * 0.785, 0, 8); //Hip
-      node = new Segment(node, s * 16, -ii * 0.785, 6.28, 1); //Humerus
-      node = new Segment(node, s * 16, ii * 1.571, 3.1415, 2); //Forearm
-      for (
-        var iii = 0;
-        iii < 4;
-        iii++ //fingers
-      ) {
-        new Segment(node, s * 4, (iii / 3 - 0.5) * 1.571, 0.1, 4);
-      }
-      new LegSystem(node, 3, s * 12, critter, 4);
-    }
-  }
-  //Tail
-  for (var i = 0; i < tail; i++) {
-    spinal = new Segment(spinal, s * 4, 0, 3.1415 * 2 / 3, 1.1);
-    for (var ii = -1; ii <= 1; ii += 2) {
-      var node = new Segment(spinal, s * 3, ii, 0.1, 2);
-      for (var iii = 0; iii < 3; iii++) {
-        node = new Segment(node, s * 3 * (tail - i) / tail, -ii * 0.1, 0.1, 2);
-      }
-    }
-  }
-  setInterval(function() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    critter.follow(Input.mouse.x, Input.mouse.y);
-  }, 33);
+
+// Enf of the code inspired by dissmulate
+
+
+// Make everything work together :
+
+var t=0;
+
+function loop(){
+  render();
+  
+  t+=.05;
+  hero.updateTail(t);
+
+  var ballPos = getBallPos();
+  ball.update(ballPos.x,ballPos.y, ballPos.z);
+  ball.receivePower(hero.transferPower);
+  hero.interactWithBall(ball.body.position);
+
+  requestAnimationFrame(loop);
 }
-canvas.style.backgroundColor = "black";
-ctx.strokeStyle = "white";
-//setupSimple();//Just the very basic string
-//setupTentacle();//Tentacle that reaches for mouse
-//setupLizard(.5,100,128);//Literal centipede
-//setupSquid(2,8);//Spidery thing
-var legNum = Math.floor(1 + Math.random() * 12);
-setupLizard(
-  8 / Math.sqrt(legNum),
-  legNum,
-  Math.floor(4 + Math.random() * legNum * 8)
-);
+
+
+function getBallPos(){
+  var vector = new THREE.Vector3();
+
+  vector.set(
+      ( mousePos.x / window.innerWidth ) * 2 - 1, 
+      - ( mousePos.y / window.innerHeight ) * 2 + 1,
+      0.1 );
+
+  vector.unproject( camera );
+  var dir = vector.sub( camera.position ).normalize();
+  var distance = (ballWallDepth - camera.position.z) / dir.z;
+  var pos = camera.position.clone().add( dir.multiplyScalar( distance ) );
+  return pos;
+}
+
+function render(){
+  if (controls) controls.update();
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('load', init, false);
+
+function init(event){
+  initScreenAnd3D();
+  createLights();
+  createFloor()
+  createHero();
+  createBall();
+  loop();
+}
